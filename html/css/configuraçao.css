@@ -167,3 +167,42 @@ body {
         margin: 0;
     }
 }
+.chart-panel {
+    margin-top: 20px;
+    padding: 22px 24px 20px;
+}
+.chart-wrap {
+    min-height: 260px;
+    overflow: hidden;
+    margin-top: 17px;
+    border: 1px solid var(--border);
+    border-radius: 13px;
+    background: var(--surface-input);
+}
+#graficoVazao {
+    display: block;
+    width: 100%;
+    height: 260px;
+}
+.chart-panel {
+    margin-top: 14px;
+    padding: 18px 15px 15px;
+}
+
+.chart-wrap {
+    min-height: 220px;
+    margin-top: 14px;
+}
+
+#graficoVazao {
+    height: 220px;
+}
+.chart-unit {
+    padding: 5px 9px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--bg-elevated);
+    color: var(--text-muted);
+    font-size: 0.72rem;
+    font-weight: 600;
+}

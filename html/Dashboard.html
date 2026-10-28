@@ -41,16 +41,15 @@
      <h2 class="vazao1">Bomba</h2>
 
 
-      <div class="linha">
-        <button id="botaoBomba" class="botao">
-            <span class="circulo"></span>
-            <span id="textoBomba">OFF</span>
-        </button>
-
-        <div class="separador"></div>
-
-        <span id="luzBomba" class="luz"></span>
-    </div>
+            <div class="linha">
+                <label class="botao" for="bombaSwitch" aria-label="Ligar ou desligar a bomba">
+                        <input id="bombaSwitch" type="checkbox" role="switch" disabled>
+                        <span class="circulo" aria-hidden="true"></span>
+                        <span id="textoBomba" aria-hidden="true">OFF</span>
+                </label>
+                <button id="btnConectar" class="botao-conectar" type="button">Conectar</button>
+        </div>
+        <p id="statusSerial" class="status-serial" role="status" aria-live="polite"></p>
     </div>
 
      <div class="quadrado2">
@@ -103,54 +102,18 @@
        </div>
 
       
-<div class="area-grafico">
-    <div class="Grafico">
-        <h2 class="vazao">Historico da vazao</h2>
-
-        <div class="grafico-conteudo">
-            <div class="valores-y">
-                <span>50</span>
-                <span>40</span>
-                <span>30</span>
-                <span>20</span>
-                <span>10</span>
-                <span>0</span>
-            </div>
-
-            <div class="grafico-principal">
-                <div class="grade">
-                    <span></span>
-                    <span></span>
-                    <span></span>
-                    <span></span>
-                    <span></span>
-                    <span></span>
-                </div>
-
-                <svg class="linha-grafico"
-                     viewBox="0 0 600 120"
-                     preserveAspectRatio="none">
-                    <polyline
-                        id="linhaVazao"
-                        points="0,60 55,52 88,82 145,30 202,83 260,30 290,24 345,84 420,10 500,90 550,45 600,110"
-                        fill="none"
-                        stroke="#60a5fa"
-                        stroke-width="1"
-                        vector-effect="non-scaling-stroke"/>
-                </svg>
-
-                <div class="horarios">
-                    <span>08h</span>
-                    <span>10h</span>
-                    <span>12h</span>
-                    <span>14h</span>
-                    <span>16h</span>
-                </div>
-            </div>
+<section class="chart-panel card" aria-labelledby="flow-history-title">
+    <div class="section-heading chart-header">
+        <div>
+            <h2 id="flow-history-title">Histórico da vazão</h2>
         </div>
+        <span class="chart-unit">L/min</span>
     </div>
-</div>
-
+    <div class="chart-wrap">
+        <canvas id="graficoVazao" width="900" height="260" role="img" aria-label="Gráfico do histórico de vazão"></canvas>
+    </div>
+</section>
+    <script src="../js/script.js"></script>
 
 </body>
 </html>

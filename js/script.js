@@ -1,3 +1,171 @@
+// Ajuste estes valores conforme o baud rate e o protocolo do controlador.
+const SERIAL_BAUD_RATE = 9600;
+const COMANDO_BOMBA_LIGAR = "1\n";
+const COMANDO_BOMBA_DESLIGAR = "0\n";
+
+// Referências globais do controle serial direto da bomba.
+let serialPort = null;
+let serialWriter = null;
+const serialEncoder = new TextEncoder();
+
+function atualizarStatusSerial(mensagem, tipo = "info") {
+    const status = document.getElementById("statusSerial");
+    if (!status) return;
+
+    status.textContent = mensagem;
+    status.dataset.tipo = tipo;
+}
+
+function atualizarControlesSeriais(conectado) {
+    const botao = document.getElementById("btnConectar");
+    const switchBomba = document.getElementById("bombaSwitch");
+
+    if (botao) botao.textContent = conectado ? "Desconectar" : "Conectar";
+    if (switchBomba) {
+        switchBomba.disabled = !conectado;
+        if (!conectado) switchBomba.checked = false;
+    }
+
+    const textoBomba = document.getElementById("textoBomba");
+    if (textoBomba && switchBomba) textoBomba.textContent = switchBomba.checked ? "ON" : "OFF";
+}
+
+async function desconectarSerialBomba() {
+    const portaAtual = serialPort;
+    const escritorAtual = serialWriter;
+    serialPort = null;
+    serialWriter = null;
+
+    if (escritorAtual) {
+        try {
+            escritorAtual.releaseLock();
+        } catch (erro) {
+            console.warn("Não foi possível liberar o writer serial:", erro);
+        }
+    }
+
+    if (portaAtual) {
+        try {
+            await portaAtual.close();
+            atualizarStatusSerial("Porta serial desconectada.");
+        } catch (erro) {
+            atualizarStatusSerial(`Falha ao fechar a porta serial: ${erro.message}`, "erro");
+        }
+    }
+
+    atualizarControlesSeriais(false);
+}
+
+function configurarControleBombaSerial() {
+    const botaoConectar = document.getElementById("btnConectar");
+    const switchBomba = document.getElementById("bombaSwitch");
+    if (!botaoConectar || !switchBomba) return;
+
+    if (!("serial" in navigator)) {
+        atualizarStatusSerial("Web Serial indisponível. Use Chrome ou Edge em localhost ou HTTPS.", "erro");
+    }
+
+    botaoConectar.addEventListener("click", async () => {
+        if (serialPort) {
+            botaoConectar.disabled = true;
+            await desconectarSerialBomba();
+            botaoConectar.disabled = false;
+            return;
+        }
+
+        if (!("serial" in navigator)) {
+            atualizarStatusSerial("Seu navegador não oferece Web Serial. Use Chrome ou Edge em localhost ou HTTPS.", "erro");
+            return;
+        }
+
+        botaoConectar.disabled = true;
+        try {
+            serialPort = await navigator.serial.requestPort();
+            await serialPort.open({ baudRate: SERIAL_BAUD_RATE });
+            serialWriter = serialPort.writable.getWriter();
+            atualizarControlesSeriais(true);
+            atualizarStatusSerial("Conectado. O controle da bomba está habilitado.");
+        } catch (erro) {
+            if (serialWriter) {
+                try {
+                    serialWriter.releaseLock();
+                } catch (erroLiberacao) {
+                    console.warn("Não foi possível liberar o writer após a falha:", erroLiberacao);
+                }
+            }
+            if (serialPort) {
+                try {
+                    await serialPort.close();
+                } catch (erroFechamento) {
+                    console.warn("Não foi possível fechar a porta após a falha:", erroFechamento);
+                }
+            }
+            serialPort = null;
+            serialWriter = null;
+            atualizarControlesSeriais(false);
+
+            if (erro.name === "NotFoundError") {
+                atualizarStatusSerial("Seleção da porta cancelada.");
+            } else if (erro.name === "SecurityError") {
+                atualizarStatusSerial("Web Serial exige Chrome ou Edge em localhost ou HTTPS.", "erro");
+            } else {
+                atualizarStatusSerial(`Não foi possível conectar à porta serial: ${erro.message}`, "erro");
+            }
+        } finally {
+            botaoConectar.disabled = false;
+        }
+    });
+
+    switchBomba.addEventListener("change", async () => {
+        const estadoSolicitado = switchBomba.checked;
+        const estadoAnterior = !estadoSolicitado;
+
+        if (!serialPort || !serialWriter) {
+            switchBomba.checked = estadoAnterior;
+            atualizarControlesSeriais(false);
+            atualizarStatusSerial("Conecte a porta serial antes de controlar a bomba.", "erro");
+            return;
+        }
+
+        switchBomba.disabled = true;
+        botaoConectar.disabled = true;
+        try {
+            const comando = estadoSolicitado ? COMANDO_BOMBA_LIGAR : COMANDO_BOMBA_DESLIGAR;
+            await serialWriter.write(serialEncoder.encode(comando));
+            const textoBomba = document.getElementById("textoBomba");
+            if (textoBomba) textoBomba.textContent = estadoSolicitado ? "ON" : "OFF";
+            atualizarStatusSerial(`Comando enviado: bomba ${estadoSolicitado ? "ligada" : "desligada"}.`);
+        } catch (erro) {
+            switchBomba.checked = estadoAnterior;
+            const textoBomba = document.getElementById("textoBomba");
+            if (textoBomba) textoBomba.textContent = estadoAnterior ? "ON" : "OFF";
+            atualizarStatusSerial(`Falha ao enviar comando para a bomba: ${erro.message}`, "erro");
+        } finally {
+            switchBomba.disabled = !serialPort;
+            botaoConectar.disabled = false;
+        }
+    });
+
+    if ("serial" in navigator) {
+        navigator.serial.addEventListener("disconnect", (evento) => {
+            if (evento.target !== serialPort) return;
+            if (serialWriter) {
+                try {
+                    serialWriter.releaseLock();
+                } catch (erro) {
+                    console.warn("Não foi possível liberar o writer após a desconexão:", erro);
+                }
+            }
+            serialPort = null;
+            serialWriter = null;
+            atualizarControlesSeriais(false);
+            atualizarStatusSerial("O dispositivo serial foi desconectado.", "erro");
+        });
+    }
+}
+
+configurarControleBombaSerial();
+
 class IrrigaSenseSerial {
     constructor() {
         this.porta = null;
@@ -516,8 +684,10 @@ class IrrigaSenseSerial {
     }
 
     atualizarModoSimulacao() {
-        this.modoSimulacaoInput.checked = this.modoSimulacao;
-        this.modoSimulacaoTexto.textContent = this.modoSimulacao ? "Modo de simulação" : "Modo real";
+        if (this.modoSimulacaoInput) this.modoSimulacaoInput.checked = this.modoSimulacao;
+        if (this.modoSimulacaoTexto) {
+            this.modoSimulacaoTexto.textContent = this.modoSimulacao ? "Modo de simulação" : "Modo real";
+        }
     }
 
     iniciarSimulacao() {
@@ -1063,6 +1233,7 @@ class IrrigaSenseSerial {
     inicializarGrafico() {
         if (!this.graficoCanvas || !this.graficoCtx) return;
         this.desenharGrafico();
+        window.addEventListener("resize", () => this.desenharGrafico());
     }
 
     renderizarHistorico() {
@@ -1074,18 +1245,29 @@ class IrrigaSenseSerial {
 
         const canvas = this.graficoCanvas;
         const ctx = this.graficoCtx;
-        const largura = canvas.width;
-        const altura = canvas.height;
+        const tamanho = canvas.getBoundingClientRect();
+        const escala = window.devicePixelRatio || 1;
+        const largura = tamanho.width;
+        const altura = tamanho.height;
+        if (!largura || !altura) return;
+
+        const larguraBitmap = Math.round(largura * escala);
+        const alturaBitmap = Math.round(altura * escala);
+        if (canvas.width !== larguraBitmap || canvas.height !== alturaBitmap) {
+            canvas.width = larguraBitmap;
+            canvas.height = alturaBitmap;
+        }
+        ctx.setTransform(escala, 0, 0, escala, 0, 0);
 
         ctx.clearRect(0, 0, largura, altura);
-        ctx.fillStyle = "#061b2c";
+        ctx.fillStyle = "#0e3a46";
         ctx.fillRect(0, 0, largura, altura);
 
-        const padding = { top: 18, right: 20, bottom: 26, left: 36 };
+        const padding = { top: 20, right: 18, bottom: 28, left: 48 };
         const maxValue = Math.max(5, ...this.historicoVazao.map((item) => item.valor), 3);
         const linhasHorizontais = 5;
 
-        ctx.strokeStyle = "rgba(148, 202, 255, 0.15)";
+        ctx.strokeStyle = "rgba(156, 199, 209, 0.22)";
         ctx.lineWidth = 1;
         for (let i = 0; i <= linhasHorizontais; i += 1) {
             const y = padding.top + ((altura - padding.top - padding.bottom) / linhasHorizontais) * i;
@@ -1093,6 +1275,11 @@ class IrrigaSenseSerial {
             ctx.moveTo(padding.left, y);
             ctx.lineTo(largura - padding.right, y);
             ctx.stroke();
+
+            ctx.fillStyle = "#d3e6e9";
+            ctx.font = "12px Arial, sans-serif";
+            ctx.textAlign = "right";
+            ctx.fillText(String(Math.round(maxValue * (1 - i / linhasHorizontais))), padding.left - 8, y + 4);
         }
 
         const pontos = this.historicoVazao.map((item, index) => {
@@ -1101,11 +1288,16 @@ class IrrigaSenseSerial {
             return { x, y, valor: item.valor };
         });
 
-        if (pontos.length > 0) {
+        if (!pontos.length) {
+            ctx.fillStyle = "#d3e6e9";
+            ctx.font = "14px Arial, sans-serif";
+            ctx.textAlign = "center";
+            ctx.fillText("Aguardando leituras de vazão", largura / 2, altura / 2);
+        } else {
             ctx.beginPath();
             ctx.moveTo(pontos[0].x, pontos[0].y);
             pontos.slice(1).forEach((ponto) => ctx.lineTo(ponto.x, ponto.y));
-            ctx.strokeStyle = "#59d6ff";
+            ctx.strokeStyle = "#9cc7d1";
             ctx.lineWidth = 2.4;
             ctx.stroke();
 
@@ -1115,13 +1307,8 @@ class IrrigaSenseSerial {
             ctx.lineTo(pontos[pontos.length - 1].x, altura - padding.bottom);
             ctx.lineTo(pontos[0].x, altura - padding.bottom);
             ctx.closePath();
-            ctx.fillStyle = "rgba(89, 214, 255, 0.08)";
+            ctx.fillStyle = "rgba(156, 199, 209, 0.18)";
             ctx.fill();
-
-            ctx.fillStyle = "#dfefff";
-            ctx.font = "11px sans-serif";
-            ctx.fillText("0", 14, altura - padding.bottom + 4);
-            ctx.fillText(String(maxValue.toFixed(1)), 10, padding.top + 8);
         }
     }
 }
@@ -1133,7 +1320,7 @@ if (!navigator.serial) {
     window.irrigasense.mostrarMensagem("Seu navegador não suporta Web Serial. Use Chrome ou Edge e execute o projeto em localhost, Live Server ou HTTPS.", "error");
 }
 
-if (Notification && Notification.permission === "default") {
+if (typeof Notification !== "undefined" && Notification.permission === "default") {
     Notification.requestPermission().catch(() => {});
 }
 
